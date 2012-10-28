@@ -36,8 +36,8 @@ type Pusher struct {
 	conn         *tls.Conn
 	payloadsChan chan *payload
 	errorChan    chan *pusherError
+	idChan       chan uint32
 	payloads     []*payload
-	payloadId    uint32
 }
 
 const (
@@ -57,14 +57,23 @@ func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err e
 		keyFile:      keyFile,
 		sandbox:      sandbox,
 		errorChan:    make(chan *pusherError),
-		payloadsChan: make(chan *payload),
-		payloadId:    0,
+		payloadsChan: make(chan *payload, 1024),
+		idChan:       make(chan uint32),
 		payloads:     make([]*payload, 0),
 	}
 
 	if err = newPusher.connectAndWait(); err != nil {
 		return
 	}
+
+	// Generate id's
+	go func() {
+		id := uint32(0)
+		for {
+			id = id + 1
+			newPusher.idChan <- id
+		}
+	}()
 
 	// listen runs in the background waiting on the payloads channel
 	go newPusher.listen()
@@ -83,11 +92,8 @@ func (p *Pusher) Shutdown() error {
 // Push a message to the designated push token
 // This is a non blocking method
 func (p *Pusher) Push(message, token string) {
-	p.payloadId++
-	payload := createPayload(message, token, p.payloadId)
-	go func() {
-		p.payloadsChan <- payload
-	}()
+	payload := createPayload(message, token, <-p.idChan)
+	p.payloadsChan <- payload
 }
 
 func (pusher *Pusher) connectAndWait() (err error) {
@@ -214,7 +220,6 @@ func (pusher *Pusher) handleReads() {
 		pusherError.err = err
 	}
 
-	log.Println("Read error, sending to channel")
 	pusher.errorChan <- pusherError
 }
 
