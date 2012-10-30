@@ -4,17 +4,10 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/binary"
-	"encoding/hex"
-	"encoding/json"
 	"log"
 	"net"
 	"time"
 )
-
-type payload struct {
-	data []byte
-	id   uint32
-}
 
 type FeedbackResponse struct {
 	timestamp time.Time
@@ -33,9 +26,12 @@ type Pusher struct {
 }
 
 const (
-	readWindow             = time.Minute * 2
-	connectionRetries      = 3
-	waitBetweenConnections = time.Minute * 1
+	// Close the connection if we don't read anything for this duration
+	// after a succesful write. If we don't then Apple silently closes the connection
+	// TODO, confirm this
+	readWindow         = time.Minute * 2
+	connectionRetries  = 3
+	waitBetweenRetries = time.Minute * 1
 
 	apnsServer        = "gateway.push.apple.com:2195"
 	apnsServerSandbox = "gateway.sandbox.push.apple.com:2195"
@@ -72,7 +68,7 @@ func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err e
 	}()
 
 	// listen runs in the background waiting on the payloads channel
-	go newPusher.listen()
+	go newPusher.waitLoop()
 
 	return
 }
@@ -105,7 +101,7 @@ func (pusher *Pusher) connectAndWait() (err error) {
 			return
 		}
 
-		time.Sleep(waitBetweenConnections)
+		time.Sleep(waitBetweenRetries)
 	}
 
 	log.Println("Connected...")
@@ -167,7 +163,7 @@ func (pusher *Pusher) handleError(err *apnsError) {
 	}
 }
 
-func (pusher *Pusher) listen() {
+func (pusher *Pusher) waitLoop() {
 	log.Println("Waiting for messages to push...")
 	for {
 		select {
@@ -210,42 +206,6 @@ func (pusher *Pusher) handleReads() {
 	}
 
 	pusher.errorChan <- apnsError
-}
-
-func createPayload(message, token string, id uint32) (p *payload) {
-	p = &payload{id: id}
-
-	// prepare inary payload from JSON structure
-	dictionary := make(map[string]interface{})
-	dictionary["aps"] = map[string]string{"alert": message}
-	bpayload, _ := json.Marshal(dictionary)
-
-	// decode hexadecimal push device token to binary byte array
-	btoken, _ := hex.DecodeString(token)
-
-	// build the actual pdu
-	buffer := new(bytes.Buffer)
-
-	// command
-	binary.Write(buffer, binary.BigEndian, uint8(1))
-
-	// transaction id, optional
-	binary.Write(buffer, binary.BigEndian, id)
-
-	// expiration time, 1 hour
-	binary.Write(buffer, binary.BigEndian, uint32(time.Now().Add(1*time.Hour).Unix()))
-
-	// push device token
-	binary.Write(buffer, binary.BigEndian, uint16(len(btoken)))
-	binary.Write(buffer, binary.BigEndian, btoken)
-
-	// push payload
-	binary.Write(buffer, binary.BigEndian, uint16(len(bpayload)))
-	binary.Write(buffer, binary.BigEndian, bpayload)
-
-	p.data = buffer.Bytes()
-
-	return
 }
 
 func (p *Pusher) connectToAPNS() (tlsConn *tls.Conn, err error) {
