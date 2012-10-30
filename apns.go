@@ -11,22 +11,14 @@ import (
 	"time"
 )
 
-// Error returned from Apple's APNS server
-type appleNotificationError struct {
-	command    uint8
-	status     uint8
-	identifier uint32
-}
-
-type pusherError struct {
-	appleError *appleNotificationError
-	payloadId  uint32
-	err        error
-}
-
 type payload struct {
 	data []byte
 	id   uint32
+}
+
+type FeedbackResponse struct {
+	timestamp time.Time
+	token     string
 }
 
 type Pusher struct {
@@ -35,7 +27,7 @@ type Pusher struct {
 	sandbox      bool
 	conn         *tls.Conn
 	payloadsChan chan *payload
-	errorChan    chan *pusherError
+	errorChan    chan *apnsError
 	idChan       chan uint32
 	payloads     []*payload
 }
@@ -44,8 +36,12 @@ const (
 	readWindow             = time.Minute * 2
 	connectionRetries      = 3
 	waitBetweenConnections = time.Minute * 1
-	apnsServer             = "gateway.push.apple.com:2195"
-	apnsServerSandbox      = "gateway.sandbox.push.apple.com:2195"
+
+	apnsServer        = "gateway.push.apple.com:2195"
+	apnsServerSandbox = "gateway.sandbox.push.apple.com:2195"
+
+	feedbackServer        = "feedback.push.apple.com:2196"
+	feedbackServerSandbox = "feedback.sandbox.push.apple.com:2196"
 )
 
 // Create a new pusher
@@ -56,7 +52,7 @@ func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err e
 		certFile:     certFile,
 		keyFile:      keyFile,
 		sandbox:      sandbox,
-		errorChan:    make(chan *pusherError),
+		errorChan:    make(chan *apnsError),
 		payloadsChan: make(chan *payload, 1024),
 		idChan:       make(chan uint32),
 		payloads:     make([]*payload, 0),
@@ -99,7 +95,7 @@ func (p *Pusher) Push(message, token string) {
 func (pusher *Pusher) connectAndWait() (err error) {
 	var conn *tls.Conn
 	for i := 1; ; i++ {
-		conn, err = pusher.connect()
+		conn, err = pusher.connectToAPNS()
 		if err == nil {
 			break
 		}
@@ -125,44 +121,37 @@ func (pusher *Pusher) connectAndWait() (err error) {
 	return
 }
 
-func (pusher *Pusher) handleError(err *pusherError) {
+func (pusher *Pusher) handleError(err *apnsError) {
 	pusher.conn.Close()
 
 	// Only reconnect if we didn't get a network timeout error
 	// Since timeouts are most likely caused by us
-	if nerr, ok := err.err.(net.Error); ok && nerr.Timeout() {
+	if nerr, ok := err.otherError.(net.Error); ok && nerr.Timeout() {
 		log.Println("Timeout error, not doing auto reconnect")
 	} else {
+		// Try and connect, retries a few times if there is an issue
 		connectionError := pusher.connectAndWait()
+		// TODO, would cause anything using the package to fail
 		if connectionError != nil {
-			// TODO, would cause anything using the package to fail
 			panic("Error connecting to APNS")
 		}
 	}
 
-	payloadId := uint32(0)
-
-	if err.appleError != nil {
-		payloadId = err.appleError.identifier
-	} else {
-		payloadId = err.payloadId
-	}
-
-	if payloadId > 0 {
-		log.Printf("Error with payload: %v\n", payloadId)
+	if err.identifier > 0 {
+		log.Printf("Error with payload: %v\n", err.identifier)
 
 		// Throw away all items up to and including the failed payload 
 		// TODO: Optimise
 		index := 0
 		for i, v := range pusher.payloads {
-			if v.id == payloadId {
+			if v.id == err.identifier {
 				index = i
 				break
 			}
 		}
 
 		// Throw away the failed payload too if it had been rejected by apple
-		if err.appleError != nil {
+		if err.command > 0 {
 			index = index + 1
 		}
 
@@ -184,7 +173,7 @@ func (pusher *Pusher) listen() {
 		select {
 
 		case err := <-pusher.errorChan:
-			log.Printf("Error: %v", err.err)
+			log.Printf("Error: %v", err)
 			pusher.handleError(err)
 
 		case payload := <-pusher.payloadsChan:
@@ -205,22 +194,22 @@ func (pusher *Pusher) listen() {
 }
 
 func (pusher *Pusher) handleReads() {
-	pusherError := new(pusherError)
+	apnsError := new(apnsError)
 
 	readb := make([]byte, 6)
 	log.Println("Waiting to read response...")
-	n, err := pusher.conn.Read(readb[:])
+	n, err := pusher.conn.Read(readb)
 	if n == 6 {
-		notificationerror := new(appleNotificationError)
-		notificationerror.command = uint8(readb[0])
-		notificationerror.status = uint8(readb[1])
-		notificationerror.identifier = uint32(readb[2])<<24 + uint32(readb[3])<<16 + uint32(readb[4])<<8 + uint32(readb[5])
-		pusherError.appleError = notificationerror
+		buf := bytes.NewBuffer(readb)
+
+		binary.Read(buf, binary.BigEndian, &apnsError.command)
+		binary.Read(buf, binary.BigEndian, &apnsError.status)
+		binary.Read(buf, binary.BigEndian, &apnsError.identifier)
 	} else if err != nil {
-		pusherError.err = err
+		apnsError.otherError = err
 	}
 
-	pusher.errorChan <- pusherError
+	pusher.errorChan <- apnsError
 }
 
 func createPayload(message, token string, id uint32) (p *payload) {
@@ -259,7 +248,25 @@ func createPayload(message, token string, id uint32) (p *payload) {
 	return
 }
 
-func (pusher *Pusher) connect() (tlsConn *tls.Conn, err error) {
+func (p *Pusher) connectToAPNS() (tlsConn *tls.Conn, err error) {
+	server := apnsServer
+	if p.sandbox {
+		server = apnsServerSandbox
+	}
+
+	return p.connect(server)
+}
+
+func (p *Pusher) connectToFeedback() (tlsConn *tls.Conn, err error) {
+	server := feedbackServer
+	if p.sandbox {
+		server = feedbackServerSandbox
+	}
+
+	return p.connect(server)
+}
+
+func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 	// load certificates and setup config
 	log.Println("Loading certificates...")
 	cert, err := tls.LoadX509KeyPair(pusher.certFile, pusher.keyFile)
@@ -274,11 +281,6 @@ func (pusher *Pusher) connect() (tlsConn *tls.Conn, err error) {
 
 	// connect to the APNS server 
 	log.Println("Dialing server...")
-
-	server := apnsServer
-	if pusher.sandbox {
-		server = apnsServerSandbox
-	}
 
 	tlsConn, err = tls.Dial("tcp", server, conf)
 	if err != nil {
