@@ -138,7 +138,7 @@ func (pusher *Pusher) handleError(err *apnsError) {
 	}
 
 	if err.identifier > 0 {
-		log.Printf("Error with payload: %v\n", err.identifier)
+		log.Println("Error with payload:", err.identifier)
 
 		// Throw away all items up to and including the failed payload 
 		// TODO: Optimise
@@ -173,7 +173,7 @@ func (pusher *Pusher) listen() {
 		select {
 
 		case err := <-pusher.errorChan:
-			log.Printf("Error: %v", err)
+			log.Println("Error:", err)
 			pusher.handleError(err)
 
 		case payload := <-pusher.payloadsChan:
@@ -181,7 +181,7 @@ func (pusher *Pusher) listen() {
 			pusher.payloads = append(pusher.payloads, payload)
 			err := pusher.push(payload)
 			if err != nil {
-				log.Printf("Write error: %v\n", err)
+				log.Println("Write error:", err)
 				pusher.connectAndWait()
 				log.Println("Resending payload")
 				// TODO: What do we do if it fails again?
@@ -271,7 +271,7 @@ func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 	log.Println("Loading certificates...")
 	cert, err := tls.LoadX509KeyPair(pusher.certFile, pusher.keyFile)
 	if err != nil {
-		log.Fatalf("Certificate or key error: %v\n", err)
+		log.Println("Certificate or key error:", err)
 		return
 	}
 
@@ -284,7 +284,7 @@ func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 
 	tlsConn, err = tls.Dial("tcp", server, conf)
 	if err != nil {
-		log.Printf("connection error: %s\n", err)
+		log.Println("Connection error:", err)
 		return
 	}
 
@@ -293,7 +293,7 @@ func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 
 func (pusher *Pusher) push(payload *payload) (err error) {
 	// write pdu
-	log.Printf("Writing payload... %v\n", payload.id)
+	log.Println("Writing payload...", payload.id)
 	i, err := pusher.conn.Write(payload.data)
 	if err != nil {
 		return
