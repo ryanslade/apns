@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"time"
 )
-
-type FeedbackResponse struct {
-	timestamp time.Time
-	token     string
-}
 
 type Pusher struct {
 	certFile     string
@@ -20,7 +17,7 @@ type Pusher struct {
 	sandbox      bool
 	conn         *tls.Conn
 	payloadsChan chan *payload
-	errorChan    chan *apnsError
+	errorChan    chan error
 	idChan       chan uint32
 	payloads     []*payload
 }
@@ -28,7 +25,7 @@ type Pusher struct {
 const (
 	// Close the connection if we don't read anything for this duration
 	// after a succesful write. If we don't then Apple silently closes the connection
-	// TODO, confirm this
+	// and future writes will fail, but only after some time
 	readWindow         = time.Minute * 2
 	connectionRetries  = 3
 	waitBetweenRetries = time.Minute * 1
@@ -48,8 +45,8 @@ func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err e
 		certFile:     certFile,
 		keyFile:      keyFile,
 		sandbox:      sandbox,
-		errorChan:    make(chan *apnsError),
-		payloadsChan: make(chan *payload, 1024),
+		errorChan:    make(chan error),
+		payloadsChan: make(chan *payload),
 		idChan:       make(chan uint32),
 		payloads:     make([]*payload, 0),
 	}
@@ -85,7 +82,7 @@ func (p *Pusher) Shutdown() error {
 // This is a non blocking method
 func (p *Pusher) Push(message, token string) {
 	payload := createPayload(message, token, <-p.idChan)
-	p.payloadsChan <- payload
+	go func() { p.payloadsChan <- payload }()
 }
 
 func (pusher *Pusher) connectAndWait() (err error) {
@@ -117,12 +114,12 @@ func (pusher *Pusher) connectAndWait() (err error) {
 	return
 }
 
-func (pusher *Pusher) handleError(err *apnsError) {
+func (pusher *Pusher) handleError(err error) {
 	pusher.conn.Close()
 
 	// Only reconnect if we didn't get a network timeout error
 	// Since timeouts are most likely caused by us
-	if nerr, ok := err.otherError.(net.Error); ok && nerr.Timeout() {
+	if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 		log.Println("Timeout error, not doing auto reconnect")
 	} else {
 		// Try and connect, retries a few times if there is an issue
@@ -133,34 +130,37 @@ func (pusher *Pusher) handleError(err *apnsError) {
 		}
 	}
 
-	if err.identifier > 0 {
-		log.Println("Error with payload:", err.identifier)
+	if ae, ok := err.(apnsError); ok {
+		if ae.identifier > 0 {
+			log.Println("Error with payload:", ae.identifier)
 
-		// Throw away all items up to and including the failed payload 
-		// TODO: Optimise
-		index := 0
-		for i, v := range pusher.payloads {
-			if v.id == err.identifier {
-				index = i
-				break
+			// Throw away all items up to and including the failed payload 
+			// TODO: Optimise
+			index := 0
+			for i, v := range pusher.payloads {
+				if v.id == ae.identifier {
+					index = i
+					break
+				}
 			}
-		}
 
-		// Throw away the failed payload too if it had been rejected by apple
-		if err.command > 0 {
-			index = index + 1
-		}
-
-		toResend := pusher.payloads[index:]
-		pusher.payloads = make([]*payload, 0) // Clear sent payloads
-
-		// Resend payloads
-		go func() {
-			for _, p := range toResend {
-				pusher.payloadsChan <- p
+			// Throw away the failed payload too if it had been rejected by apple
+			if ae.command > 0 {
+				index = index + 1
 			}
-		}()
+
+			toResend := pusher.payloads[index:]
+			pusher.payloads = make([]*payload, 0) // Clear sent payloads
+
+			// Resend payloads
+			go func() {
+				for _, p := range toResend {
+					pusher.payloadsChan <- p
+				}
+			}()
+		}
 	}
+
 }
 
 func (pusher *Pusher) waitLoop() {
@@ -190,22 +190,33 @@ func (pusher *Pusher) waitLoop() {
 }
 
 func (pusher *Pusher) handleReads() {
-	apnsError := new(apnsError)
-
 	readb := make([]byte, 6)
 	log.Println("Waiting to read response...")
 	n, err := pusher.conn.Read(readb)
-	if n == 6 {
-		buf := bytes.NewBuffer(readb)
 
-		binary.Read(buf, binary.BigEndian, &apnsError.command)
-		binary.Read(buf, binary.BigEndian, &apnsError.status)
-		binary.Read(buf, binary.BigEndian, &apnsError.identifier)
-	} else if err != nil {
-		apnsError.otherError = err
+	if err != nil {
+		pusher.errorChan <- err
+	} else {
+		// We expect 6
+		if n == 6 {
+			var apnsError apnsError
+
+			buf := bytes.NewBuffer(readb)
+
+			var readErr error
+			readErr = binary.Read(buf, binary.BigEndian, &apnsError.command)
+			readErr = binary.Read(buf, binary.BigEndian, &apnsError.status)
+			readErr = binary.Read(buf, binary.BigEndian, &apnsError.identifier)
+			if readErr != nil {
+				pusher.errorChan <- readErr
+				return
+			}
+
+			pusher.errorChan <- apnsError // This is the happy path
+		} else {
+			pusher.errorChan <- errors.New(fmt.Sprintf("Expected 6 bytes from APNS read, got %v", n))
+		}
 	}
-
-	pusher.errorChan <- apnsError
 }
 
 func (p *Pusher) connectToAPNS() (tlsConn *tls.Conn, err error) {
