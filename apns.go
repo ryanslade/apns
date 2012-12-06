@@ -32,9 +32,6 @@ const (
 
 	apnsServer        = "gateway.push.apple.com:2195"
 	apnsServerSandbox = "gateway.sandbox.push.apple.com:2195"
-
-	feedbackServer        = "feedback.push.apple.com:2196"
-	feedbackServerSandbox = "feedback.sandbox.push.apple.com:2196"
 )
 
 // Create a new pusher
@@ -223,15 +220,6 @@ func (p *Pusher) connectToAPNS() (tlsConn *tls.Conn, err error) {
 	server := apnsServer
 	if p.sandbox {
 		server = apnsServerSandbox
-	}
-
-	return p.connect(server)
-}
-
-func (p *Pusher) connectToFeedback() (tlsConn *tls.Conn, err error) {
-	server := feedbackServer
-	if p.sandbox {
-		server = feedbackServerSandbox
 	}
 
 	return p.connect(server)
