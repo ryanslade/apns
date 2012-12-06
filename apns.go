@@ -37,8 +37,8 @@ const (
 // Create a new pusher
 // certFile and keyFile are paths to the certificate and APNS private key
 // Sandbox specifies whether to use the APNS sandbox or production server
-func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err error) {
-	newPusher = &Pusher{
+func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
+	newPusher := &Pusher{
 		certFile:     certFile,
 		keyFile:      keyFile,
 		sandbox:      sandbox,
@@ -48,8 +48,8 @@ func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err e
 		payloads:     make([]*payload, 0),
 	}
 
-	if err = newPusher.connectAndWait(); err != nil {
-		return
+	if err := newPusher.connectAndWait(); err != nil {
+		return newPusher, err
 	}
 
 	// Generate id's
@@ -64,7 +64,7 @@ func NewPusher(certFile, keyFile string, sandbox bool) (newPusher *Pusher, err e
 	// listen runs in the background waiting on the payloads channel
 	go newPusher.waitLoop()
 
-	return
+	return newPusher, nil
 }
 
 // Shutdown gracefully 
@@ -84,18 +84,24 @@ func (p *Pusher) Push(message, token string) {
 
 func (pusher *Pusher) connectAndWait() (err error) {
 	var conn *tls.Conn
+
+	// Try and connect a few times
 	for i := 1; ; i++ {
 		conn, err = pusher.connectToAPNS()
 		if err == nil {
 			break
 		}
 
-		// We've tried enough times, give up
-		if err != nil && i == connectionRetries {
-			return
+		if nerr, ok := err.(net.Error); ok {
+			if i == connectionRetries {
+				return nerr
+			}
+
+			time.Sleep(waitBetweenRetries)
 		}
 
-		time.Sleep(waitBetweenRetries)
+		// Non network error
+		return
 	}
 
 	log.Println("Connected...")
