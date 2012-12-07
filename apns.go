@@ -76,10 +76,9 @@ func (p *Pusher) Shutdown() error {
 }
 
 // Push a message to the designated push token
-// This is a non blocking method
 func (p *Pusher) Push(message, token string) {
 	payload := createPayload(message, token, <-p.idChan)
-	go func() { p.payloadsChan <- payload }()
+	p.payloadsChan <- payload
 }
 
 func (pusher *Pusher) connectAndWait() (err error) {
