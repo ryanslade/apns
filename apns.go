@@ -173,15 +173,19 @@ func (pusher *Pusher) waitLoop() {
 			pusher.handleError(err)
 
 		case payload := <-pusher.payloadsChan:
-			pusher.payloads = append(pusher.payloads, payload)
 			err := pusher.push(payload)
+
 			if err != nil {
 				log.Println("Write error:", err)
-				pusher.connectAndWait()
-				log.Println("Resending payload")
 				go func() {
+					log.Println("Resending payload")
 					pusher.payloadsChan <- payload
 				}()
+
+				pusher.handleError(errors.New("Write error"))
+			} else {
+				// Only succesfully written payloads are added
+				pusher.payloads = append(pusher.payloads, payload)
 			}
 
 		}
@@ -253,17 +257,18 @@ func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 	return
 }
 
-func (pusher *Pusher) push(payload *payload) (err error) {
+func (pusher *Pusher) push(payload *payload) error {
 	// write pdu
 	log.Println("Writing payload...", payload.id)
 	i, err := pusher.conn.Write(payload.data)
 	if err != nil {
-		return
+		return err
 	}
 	log.Printf("Wrote %v bytes\n", i)
 
 	// No write error, extend timeout window
+	// Happy to ignore errors changing the read deadline
 	pusher.conn.SetReadDeadline(time.Now().Add(readWindow))
 
-	return
+	return nil
 }
