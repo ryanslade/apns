@@ -146,7 +146,7 @@ func (pusher *Pusher) handleError(err error) {
 			}
 
 			// Throw away the failed payload too if it had been rejected by apple
-			if ae.command > 0 {
+			if ae.status > 0 {
 				index = index + 1
 			}
 
