@@ -165,7 +165,6 @@ func (pusher *Pusher) handleError(err error) {
 }
 
 func (pusher *Pusher) waitLoop() {
-	log.Println("Waiting for messages to push...")
 	for {
 		select {
 
@@ -174,15 +173,15 @@ func (pusher *Pusher) waitLoop() {
 			pusher.handleError(err)
 
 		case payload := <-pusher.payloadsChan:
-			log.Println("Received payload on channel.")
 			pusher.payloads = append(pusher.payloads, payload)
 			err := pusher.push(payload)
 			if err != nil {
 				log.Println("Write error:", err)
 				pusher.connectAndWait()
 				log.Println("Resending payload")
-				// TODO: What do we do if it fails again?
-				pusher.push(payload)
+				go func() {
+					pusher.payloadsChan <- payload
+				}()
 			}
 
 		}
