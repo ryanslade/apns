@@ -26,9 +26,10 @@ const (
 	// Close the connection if we don't read anything for this duration
 	// after a succesful write. If we don't then Apple silently closes the connection
 	// and future writes will fail, but only after some time
-	readWindow         = time.Minute * 2
-	connectionRetries  = 3
-	waitBetweenRetries = time.Minute * 1
+	readWindow = time.Minute * 2
+
+	waitBetweenRetries    = time.Minute * 1
+	maxWaitBetweenRetries = time.Minute * 30
 
 	apnsServer        = "gateway.push.apple.com:2195"
 	apnsServerSandbox = "gateway.sandbox.push.apple.com:2195"
@@ -73,26 +74,31 @@ func (p *Pusher) Push(message, token string) {
 	p.payloadsChan <- payload
 }
 
-func (pusher *Pusher) connectAndWait() (err error) {
+func (pusher *Pusher) connectAndWait() error {
 	var conn *tls.Conn
 
-	// Try and connect a few times
-	for i := 1; ; i++ {
+	// Try and connect 
+	waitLength := waitBetweenRetries
+	for {
+		var err error
 		conn, err = pusher.connectToAPNS()
 		if err == nil {
 			break
 		}
 
 		if nerr, ok := err.(net.Error); ok {
-			if i == connectionRetries {
-				return nerr
+			// Network error, wait before reconnecting
+			log.Printf("Error connecting to APNS: %v, sleeping for %v", nerr, waitLength)
+			time.Sleep(waitLength)
+			// Keep increasing wait length up to a maximum
+			if waitLength < maxWaitBetweenRetries {
+				waitLength = waitLength + waitBetweenRetries
 			}
-
-			time.Sleep(waitBetweenRetries)
+			continue
 		}
 
 		// Non network error
-		return
+		return err
 	}
 
 	log.Println("Connected...")
@@ -105,7 +111,7 @@ func (pusher *Pusher) connectAndWait() (err error) {
 
 	go pusher.handleReads()
 
-	return
+	return nil
 }
 
 func (pusher *Pusher) handleError(err error) {
@@ -116,11 +122,12 @@ func (pusher *Pusher) handleError(err error) {
 	if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 		log.Println("Timeout error, not doing auto reconnect")
 	} else {
-		// Try and connect, retries a few times if there is an issue
+		// Try and connect forever 
 		connectionError := pusher.connectAndWait()
-		// TODO, would cause anything using the package to fail
 		if connectionError != nil {
-			panic("Error connecting to APNS")
+			// connectAndWait will only return an error if there was a non network error
+			// in this case we have to panic 
+			panic("Non network error connecting")
 		}
 	}
 
