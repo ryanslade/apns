@@ -67,14 +67,6 @@ func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 	return newPusher, nil
 }
 
-// Shutdown gracefully 
-// (not implemened yet)
-func (p *Pusher) Shutdown() error {
-	// Shut down gracefully
-	// TODO
-	return nil
-}
-
 // Push a message to the designated push token
 func (p *Pusher) Push(message, token string) {
 	payload := createPayload(message, token, <-p.idChan)
