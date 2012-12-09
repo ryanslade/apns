@@ -16,10 +16,10 @@ type Pusher struct {
 	keyFile      string
 	sandbox      bool
 	conn         *tls.Conn
-	payloadsChan chan *payload
+	payloadsChan chan *rawPayload
 	errorChan    chan error
 	idChan       chan uint32
-	payloads     []*payload
+	payloads     []*rawPayload
 }
 
 const (
@@ -44,9 +44,9 @@ func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 		keyFile:      keyFile,
 		sandbox:      sandbox,
 		errorChan:    make(chan error),
-		payloadsChan: make(chan *payload),
+		payloadsChan: make(chan *rawPayload),
 		idChan:       make(chan uint32),
-		payloads:     make([]*payload, 0),
+		payloads:     make([]*rawPayload, 0),
 	}
 
 	if err := newPusher.connectAndWait(); err != nil {
@@ -69,12 +69,18 @@ func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 }
 
 // Push a message to the designated push token
-func (p *Pusher) Push(message, token string) error {
-	payload, err := createPayload(message, token, <-p.idChan)
+func (p *Pusher) PushMessage(message, token string) error {
+	payload := Payload{Aps: aps{Alert: message}}
+	return p.PushPayload(payload, token)
+}
+
+// Push a more complex payload to the designated push token
+func (p *Pusher) PushPayload(payload Payload, token string) error {
+	rawPayload, err := createPayload(payload, token, <-p.idChan)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error creating payload: %v", err))
 	}
-	p.payloadsChan <- payload
+	p.payloadsChan <- rawPayload
 	return nil
 }
 
@@ -155,7 +161,7 @@ func (pusher *Pusher) handleError(err error) {
 			}
 
 			toResend := pusher.payloads[index:]
-			pusher.payloads = make([]*payload, 0) // Clear sent payloads
+			pusher.payloads = make([]*rawPayload, 0) // Clear sent payloads
 
 			// Resend payloads
 			go func() {
@@ -270,7 +276,7 @@ func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 	return
 }
 
-func (pusher *Pusher) push(payload *payload) error {
+func (pusher *Pusher) push(payload *rawPayload) error {
 	// write pdu
 	log.Println("Writing payload...", payload.id)
 	i, err := pusher.conn.Write(payload.data)

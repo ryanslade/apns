@@ -10,18 +10,26 @@ import (
 	"time"
 )
 
-type payload struct {
+type aps struct {
+	Badge int    `json:"badge,omitempty"`
+	Alert string `json:"alert,omitempty"`
+	Sound string `json:"sound,omitempty"`
+}
+
+type Payload struct {
+	Aps aps `json:"aps"`
+}
+
+type rawPayload struct {
 	data []byte
 	id   uint32
 }
 
-func createPayload(message, token string, id uint32) (*payload, error) {
-	p := &payload{id: id}
+func createPayload(payload Payload, token string, id uint32) (*rawPayload, error) {
+	p := &rawPayload{id: id}
 
 	// prepare binary payload from JSON structure
-	dictionary := make(map[string]interface{})
-	dictionary["aps"] = map[string]string{"alert": message}
-	bpayload, err := json.Marshal(dictionary)
+	bpayload, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
