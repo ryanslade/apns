@@ -69,9 +69,13 @@ func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 }
 
 // Push a message to the designated push token
-func (p *Pusher) Push(message, token string) {
-	payload := createPayload(message, token, <-p.idChan)
+func (p *Pusher) Push(message, token string) error {
+	payload, err := createPayload(message, token, <-p.idChan)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Error creating payload: %v", err))
+	}
 	p.payloadsChan <- payload
+	return nil
 }
 
 func (pusher *Pusher) connectAndWait() error {
@@ -207,9 +211,18 @@ func (pusher *Pusher) handleReads() {
 
 			buf := bytes.NewBuffer(readb)
 
-			var readErr error
-			readErr = binary.Read(buf, binary.BigEndian, &apnsError.command)
+			readErr := binary.Read(buf, binary.BigEndian, &apnsError.command)
+			if readErr != nil {
+				pusher.errorChan <- readErr
+				return
+			}
+
 			readErr = binary.Read(buf, binary.BigEndian, &apnsError.status)
+			if readErr != nil {
+				pusher.errorChan <- readErr
+				return
+			}
+
 			readErr = binary.Read(buf, binary.BigEndian, &apnsError.identifier)
 			if readErr != nil {
 				pusher.errorChan <- readErr
