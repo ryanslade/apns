@@ -41,7 +41,7 @@ func createPayload(payload Payload, token string, id uint32) (*rawPayload, error
 	}
 
 	// build the actual pdu
-	var buffer *bytes.Buffer
+	buffer := &bytes.Buffer{}
 
 	// command
 	err = binary.Write(buffer, binary.BigEndian, uint8(1))
