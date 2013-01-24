@@ -193,6 +193,8 @@ func (p *Pusher) cleanupPayloads() {
 }
 
 func (pusher *Pusher) waitLoop() {
+	var payloadsLastCleaned time.Time
+
 	for {
 
 		select {
@@ -219,7 +221,10 @@ func (pusher *Pusher) waitLoop() {
 
 		}
 
-		pusher.cleanupPayloads()
+		if time.Since(payloadsLastCleaned) > payloadLifeTime {
+			pusher.cleanupPayloads()
+			payloadsLastCleaned = time.Now()
+		}
 	}
 }
 
