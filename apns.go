@@ -193,7 +193,7 @@ func (p *Pusher) cleanupPayloads() {
 }
 
 func (pusher *Pusher) waitLoop() {
-	var payloadsLastCleaned time.Time
+	cleanupPayloads := time.Tick(payloadLifeTime)
 
 	for {
 
@@ -219,12 +219,11 @@ func (pusher *Pusher) waitLoop() {
 				pusher.payloads = append(pusher.payloads, payload)
 			}
 
+		case <-cleanupPayloads:
+			pusher.cleanupPayloads()
+
 		}
 
-		if time.Since(payloadsLastCleaned) > payloadLifeTime {
-			pusher.cleanupPayloads()
-			payloadsLastCleaned = time.Now()
-		}
 	}
 }
 
