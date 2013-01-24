@@ -21,12 +21,13 @@ type Payload struct {
 }
 
 type rawPayload struct {
-	data []byte
-	id   uint32
+	data    []byte
+	id      uint32
+	created time.Time
 }
 
 func createPayload(payload Payload, token string, id uint32) (*rawPayload, error) {
-	p := &rawPayload{id: id}
+	p := &rawPayload{id: id, created: time.Now()}
 
 	// prepare binary payload from JSON structure
 	bpayload, err := json.Marshal(payload)

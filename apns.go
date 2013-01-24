@@ -33,6 +33,8 @@ const (
 
 	apnsServer        = "gateway.push.apple.com:2195"
 	apnsServerSandbox = "gateway.sandbox.push.apple.com:2195"
+
+	payloadLifeTime = 5 * time.Minute // How long to hold onto old payloads
 )
 
 // Create a new pusher
@@ -131,14 +133,15 @@ func (pusher *Pusher) handleError(err error) {
 	// Since timeouts are most likely caused by us
 	if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
 		log.Println("Timeout error, not doing auto reconnect")
-	} else {
-		// Try and connect forever 
-		connectionError := pusher.connectAndWait()
-		if connectionError != nil {
-			// connectAndWait will only return an error if there was a non network error
-			// in this case we have to panic 
-			panic("Non network error connecting")
-		}
+		return
+	}
+
+	// Try and connect forever 
+	connectionError := pusher.connectAndWait()
+	if connectionError != nil {
+		// connectAndWait will only return an error if there was a non network error
+		// in this case we have to panic 
+		panic("Non network error connecting")
 	}
 
 	if ae, ok := err.(apnsError); ok {
@@ -174,8 +177,20 @@ func (pusher *Pusher) handleError(err error) {
 
 }
 
+func (p *Pusher) cleanupPayloads() {
+	livePayloads := make([]*rawPayload, 0)
+	for _, v := range p.payloads {
+		if time.Since(v.created) > payloadLifeTime {
+			continue
+		}
+		livePayloads = append(livePayloads, v)
+	}
+	p.payloads = livePayloads
+}
+
 func (pusher *Pusher) waitLoop() {
 	for {
+
 		select {
 
 		case err := <-pusher.errorChan:
@@ -200,6 +215,7 @@ func (pusher *Pusher) waitLoop() {
 
 		}
 
+		pusher.cleanupPayloads()
 	}
 }
 
