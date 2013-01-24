@@ -178,6 +178,8 @@ func (pusher *Pusher) handleError(err error) {
 }
 
 func (p *Pusher) cleanupPayloads() {
+	log.Println("Cleaning up payloads, before:", len(p.payloads))
+
 	livePayloads := make([]*rawPayload, 0)
 	for _, v := range p.payloads {
 		if time.Since(v.created) > payloadLifeTime {
@@ -186,6 +188,8 @@ func (p *Pusher) cleanupPayloads() {
 		livePayloads = append(livePayloads, v)
 	}
 	p.payloads = livePayloads
+
+	log.Println("After:", len(p.payloads))
 }
 
 func (pusher *Pusher) waitLoop() {
