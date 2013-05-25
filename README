@@ -1,6 +1,6 @@
 Simple library for interacting with Apple's APNS servers.
 
-The library is intented to be used in long running applications and has reconnect logic.
+The library is intended to be used in long running applications and has reconnect logic.
 
 Support for the APNS Feedback service is also provided.
 
