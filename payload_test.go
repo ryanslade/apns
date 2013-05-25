@@ -5,7 +5,7 @@ import (
 )
 
 func TestCreatePayloadDoesNotPanic(t *testing.T) {
-	rawPayload := Payload{Aps: aps{Alert: "Message"}}
+	rawPayload := Payload{Aps: Aps{Alert: "Message"}}
 	payload, err := createPayload(rawPayload, "1234567812345678123456781234567812345678123456781234567812345678", 1)
 
 	if err != nil {

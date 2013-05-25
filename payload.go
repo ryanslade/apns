@@ -24,7 +24,7 @@ type Aps struct {
 
 // The payload sent to the APNS server
 type Payload struct {
-	Aps aps `json:"aps"`
+	Aps Aps `json:"aps"`
 }
 
 type rawPayload struct {

@@ -74,7 +74,7 @@ func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 // Push a message to the designated push token.
 // The method will block until the payload has been sent
 func (p *Pusher) PushMessage(message, token string) error {
-	payload := Payload{Aps: aps{Alert: message}}
+	payload := Payload{Aps: Aps{Alert: message}}
 	return p.PushPayload(payload, token)
 }
 
