@@ -14,9 +14,12 @@ const (
 	feedbackServerSandbox = "feedback.sandbox.push.apple.com:2196"
 )
 
+// An item returned from the APNS Feedback service
 type Feedback struct {
+	// The time the feedback item was created by Apple (UTC)
 	TimeStamp time.Time
-	Token     string
+	// The device token that is no longer valid
+	Token string
 }
 
 func (p *Pusher) connectToFeedback() (tlsConn *tls.Conn, err error) {
@@ -28,6 +31,9 @@ func (p *Pusher) connectToFeedback() (tlsConn *tls.Conn, err error) {
 	return p.connect(server)
 }
 
+// Connect to the APNS Feedback service and return relevent tokens.
+// Details of the Feedback service are available here:
+// http://developer.apple.com/library/mac/#documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Chapters/CommunicatingWIthAPS.html#//apple_ref/doc/uid/TP40008194-CH101-SW3
 func (p *Pusher) GetFeedback() ([]Feedback, error) {
 	feedback := make([]Feedback, 0)
 

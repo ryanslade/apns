@@ -10,12 +10,19 @@ import (
 	"time"
 )
 
-type aps struct {
-	Badge int    `json:"badge,omitempty"`
+// The payload details
+type Aps struct {
+	// The new number to appear in the badge on the app icon.
+	// Optional.
+	Badge int `json:"badge,omitempty"`
+	// The text that appears in the notification.
 	Alert string `json:"alert,omitempty"`
+	// The sound to play when the alert is received.
+	// Optional
 	Sound string `json:"sound,omitempty"`
 }
 
+// The payload sent to the APNS server
 type Payload struct {
 	Aps aps `json:"aps"`
 }

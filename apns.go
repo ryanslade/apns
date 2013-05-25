@@ -37,9 +37,10 @@ const (
 	payloadLifeTime = 5 * time.Minute // How long to hold onto old payloads
 )
 
-// Create a new pusher
-// certFile and keyFile are paths to the certificate and APNS private key
-// Sandbox specifies whether to use the APNS sandbox or production server
+// Create a new pusher.
+// certFile and keyFile are paths to the certificate and APNS private key.
+// Sandbox specifies whether to use the APNS sandbox or production server.
+// The method will block until a succesful connection to the APNS server has been made.
 func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 	newPusher := &Pusher{
 		certFile:     certFile,
@@ -89,7 +90,7 @@ func (p *Pusher) PushPayload(payload Payload, token string) error {
 func (pusher *Pusher) connectAndWait() error {
 	var conn *tls.Conn
 
-	// Try and connect 
+	// Try and connect
 	waitLength := waitBetweenRetries
 	for {
 		var err error
@@ -118,7 +119,7 @@ func (pusher *Pusher) connectAndWait() error {
 
 	// The APNS servers seem to timeout after a few minutes of no activity
 	// We'll wait for a set time before the read times out
-	// The time will extend after each succesful write 
+	// The time will extend after each succesful write
 	pusher.conn.SetReadDeadline(time.Now().Add(readWindow))
 
 	go pusher.handleReads()
@@ -136,11 +137,11 @@ func (pusher *Pusher) handleError(err error) {
 		return
 	}
 
-	// Try and connect forever 
+	// Try and connect forever
 	connectionError := pusher.connectAndWait()
 	if connectionError != nil {
 		// connectAndWait will only return an error if there was a non network error
-		// in this case we have to panic 
+		// in this case we have to panic
 		panic("Non network error connecting")
 	}
 
@@ -148,7 +149,7 @@ func (pusher *Pusher) handleError(err error) {
 		if ae.identifier > 0 {
 			log.Println("Error with payload:", ae.identifier)
 
-			// Throw away all items up to and including the failed payload 
+			// Throw away all items up to and including the failed payload
 			// TODO: Optimise
 			index := 0
 			for i, v := range pusher.payloads {
@@ -288,7 +289,7 @@ func (pusher *Pusher) connect(server string) (tlsConn *tls.Conn, err error) {
 		Certificates: []tls.Certificate{cert},
 	}
 
-	// connect to the APNS server 
+	// connect to the APNS server
 	log.Println("Dialing server...")
 
 	tlsConn, err = tls.Dial("tcp", server, conf)

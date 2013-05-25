@@ -12,7 +12,7 @@ type apnsError struct {
 }
 
 var (
-	FriendlyMessages []string = []string{
+	friendlyMessages []string = []string{
 		"No Errors",
 		"Processing Error",
 		"Missing Device Token",
@@ -26,17 +26,17 @@ var (
 )
 
 const (
-	UnknownErrorMessage = "Unknown error"
+	unknownErrorMessage = "Unknown error"
 )
 
 func (e apnsError) Error() string {
 	formatString := fmt.Sprint("APNS Error: %v for payload ", e.identifier)
 
-	if e.command != 8 || e.status < 0 || e.status > uint8(len(FriendlyMessages)-1) {
-		return fmt.Sprintf(formatString, UnknownErrorMessage)
+	if e.command != 8 || e.status < 0 || e.status > uint8(len(friendlyMessages)-1) {
+		return fmt.Sprintf(formatString, unknownErrorMessage)
 	}
 
-	return fmt.Sprintf(formatString, FriendlyMessages[e.status])
+	return fmt.Sprintf(formatString, friendlyMessages[e.status])
 }
 
 func (e apnsError) String() string {
