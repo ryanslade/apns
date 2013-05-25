@@ -1,0 +1,11 @@
+Simple library for interacting with Apple's APNS servers.
+
+The library is intented to be used in long running applications and has reconnect logic.
+
+Support for the APNS Feedback service is also provided.
+
+Follow this guide for setting up your APNS push certificates:
+NOTE: Do not perform step 6
+http://blog.serverdensity.com/2010/06/05/how-to-renew-your-apple-push-notification-push-ssl-certificate/
+
+Use GoDoc to see usage documentation

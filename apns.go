@@ -40,7 +40,7 @@ const (
 // Create a new pusher.
 // certFile and keyFile are paths to the certificate and APNS private key.
 // Sandbox specifies whether to use the APNS sandbox or production server.
-// The method will block until a succesful connection to the APNS server has been made.
+// The method will block until a succesful connection to the APNS server has been established.
 func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 	newPusher := &Pusher{
 		certFile:     certFile,
@@ -71,13 +71,15 @@ func NewPusher(certFile, keyFile string, sandbox bool) (*Pusher, error) {
 	return newPusher, nil
 }
 
-// Push a message to the designated push token
+// Push a message to the designated push token.
+// The method will block until the payload has been sent
 func (p *Pusher) PushMessage(message, token string) error {
 	payload := Payload{Aps: aps{Alert: message}}
 	return p.PushPayload(payload, token)
 }
 
-// Push a more complex payload to the designated push token
+// Push a more complex payload to the designated push token.
+// The method will block until the payload has been sent
 func (p *Pusher) PushPayload(payload Payload, token string) error {
 	rawPayload, err := createPayload(payload, token, <-p.idChan)
 	if err != nil {
