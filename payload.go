@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 )
 
@@ -33,6 +34,18 @@ type rawPayload struct {
 	created time.Time
 }
 
+type binaryWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (bw *binaryWriter) write(v interface{}) {
+	if bw.err != nil {
+		return
+	}
+	bw.err = binary.Write(bw.w, binary.BigEndian, v)
+}
+
 func createPayload(payload Payload, token string, id uint32) (*rawPayload, error) {
 	p := &rawPayload{id: id, created: time.Now()}
 
@@ -48,47 +61,21 @@ func createPayload(payload Payload, token string, id uint32) (*rawPayload, error
 		return nil, errors.New(fmt.Sprintf("Error decoding token: %v. Error: %v", token, err))
 	}
 
+	buffer := new(bytes.Buffer)
+
 	// build the actual pdu
-	buffer := &bytes.Buffer{}
+	bw := binaryWriter{w: buffer}
 
-	// command
-	err = binary.Write(buffer, binary.BigEndian, uint8(1))
-	if err != nil {
-		return nil, err
-	}
+	bw.write(uint8(1))                                     // command
+	bw.write(id)                                           // transaction id, optional
+	bw.write(uint32(time.Now().Add(1 * time.Hour).Unix())) // expiration time, 1 hour
+	bw.write(uint16(len(btoken)))                          // push device token
+	bw.write(btoken)                                       //
+	bw.write(uint16(len(bpayload)))                        // push payload
+	bw.write(bpayload)                                     //
 
-	// transaction id, optional
-	err = binary.Write(buffer, binary.BigEndian, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// expiration time, 1 hour
-	err = binary.Write(buffer, binary.BigEndian, uint32(time.Now().Add(1*time.Hour).Unix()))
-	if err != nil {
-		return nil, err
-	}
-
-	// push device token
-	err = binary.Write(buffer, binary.BigEndian, uint16(len(btoken)))
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(buffer, binary.BigEndian, btoken)
-	if err != nil {
-		return nil, err
-	}
-
-	// push payload
-	err = binary.Write(buffer, binary.BigEndian, uint16(len(bpayload)))
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(buffer, binary.BigEndian, bpayload)
-	if err != nil {
-		return nil, err
+	if bw.err != nil {
+		return nil, bw.err
 	}
 
 	p.data = buffer.Bytes()
