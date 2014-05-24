@@ -81,7 +81,7 @@ func (p *Pusher) PushMessage(message, token string) error {
 // Push a more complex payload to the designated push token.
 // The method will block until the payload has been sent
 func (p *Pusher) PushPayload(payload Payload, token string) error {
-	rawPayload, err := createPayload(payload, token, <-p.idChan)
+	rawPayload, err := createPayload(payload, token, <-p.idChan, time.Now())
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error creating payload: %v", err))
 	}

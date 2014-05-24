@@ -46,8 +46,8 @@ func (bw *binaryWriter) write(v interface{}) {
 	bw.err = binary.Write(bw.w, binary.BigEndian, v)
 }
 
-func createPayload(payload Payload, token string, id uint32) (*rawPayload, error) {
-	p := &rawPayload{id: id, created: time.Now()}
+func createPayload(payload Payload, token string, id uint32, now time.Time) (*rawPayload, error) {
+	p := &rawPayload{id: id, created: now}
 
 	// prepare binary payload from JSON structure
 	bpayload, err := json.Marshal(payload)
@@ -66,13 +66,13 @@ func createPayload(payload Payload, token string, id uint32) (*rawPayload, error
 	// build the actual pdu
 	bw := binaryWriter{w: buffer}
 
-	bw.write(uint8(1))                                     // command
-	bw.write(id)                                           // transaction id, optional
-	bw.write(uint32(time.Now().Add(1 * time.Hour).Unix())) // expiration time, 1 hour
-	bw.write(uint16(len(btoken)))                          // push device token
-	bw.write(btoken)                                       //
-	bw.write(uint16(len(bpayload)))                        // push payload
-	bw.write(bpayload)                                     //
+	bw.write(uint8(1))                              // command
+	bw.write(id)                                    // transaction id, optional
+	bw.write(uint32(now.Add(1 * time.Hour).Unix())) // expiration time, 1 hour
+	bw.write(uint16(len(btoken)))                   // push device token
+	bw.write(btoken)                                //
+	bw.write(uint16(len(bpayload)))                 // push payload
+	bw.write(bpayload)                              //
 
 	if bw.err != nil {
 		return nil, bw.err
