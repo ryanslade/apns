@@ -32,6 +32,7 @@ func TestCreatePayloadData(t *testing.T) {
 	if !reflect.DeepEqual(expectedData, payload.data) {
 		t.Errorf("Payload data incorrect")
 		t.Error(payload.data)
+		t.Error(expectedData)
 	}
 }
 
@@ -40,7 +41,7 @@ func BenchmarkCreatePayload(b *testing.B) {
 		rawPayload := Payload{Aps: Aps{Alert: "Message"}}
 		payload, err := createPayload(rawPayload, "1234567812345678123456781234567812345678123456781234567812345678", 1, knownTime)
 		if err != nil {
-			b.Fatalf("Error should not be nil, got:", err)
+			b.Fatalf("Error should not be nil, got: %v", err)
 		}
 		if payload == nil {
 			b.Fatal("Payload is nil")

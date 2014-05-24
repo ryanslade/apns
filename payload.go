@@ -1,7 +1,6 @@
 package apns
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -61,24 +60,18 @@ func createPayload(payload Payload, token string, id uint32, now time.Time) (*ra
 		return nil, errors.New(fmt.Sprintf("Error decoding token: %v. Error: %v", token, err))
 	}
 
-	buffer := new(bytes.Buffer)
+	buffer := make([]byte, 1+4+4+2+len(btoken)+2+len(bpayload))
 
 	// build the actual pdu
-	bw := binaryWriter{w: buffer}
+	buffer[0] = uint8(1)                                                        // command
+	binary.BigEndian.PutUint32(buffer[1:], id)                                  // transaction id, optional
+	binary.BigEndian.PutUint32(buffer[5:], uint32(now.Add(1*time.Hour).Unix())) // expiration time, 1 hour
+	binary.BigEndian.PutUint16(buffer[9:], uint16(len(btoken)))                 // push device token
+	copy(buffer[11:], btoken)                                                   //
+	binary.BigEndian.PutUint16(buffer[11+len(btoken):], uint16(len(bpayload)))  // push payload
+	copy(buffer[11+len(btoken)+2:], bpayload)                                   //
 
-	bw.write(uint8(1))                              // command
-	bw.write(id)                                    // transaction id, optional
-	bw.write(uint32(now.Add(1 * time.Hour).Unix())) // expiration time, 1 hour
-	bw.write(uint16(len(btoken)))                   // push device token
-	bw.write(btoken)                                //
-	bw.write(uint16(len(bpayload)))                 // push payload
-	bw.write(bpayload)                              //
-
-	if bw.err != nil {
-		return nil, bw.err
-	}
-
-	p.data = buffer.Bytes()
+	p.data = buffer
 
 	return p, nil
 }
