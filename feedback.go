@@ -48,7 +48,6 @@ func (p *Pusher) GetFeedback() ([]Feedback, error) {
 	var tokenLength int16
 
 	for {
-
 		err = binary.Read(conn, binary.BigEndian, &seconds)
 		if err == io.EOF {
 			// EOF here is not an error, it just means there are no more feedback items
@@ -80,8 +79,5 @@ func (p *Pusher) GetFeedback() ([]Feedback, error) {
 		log.Printf("Timestamp: %v, Token: %v", timestamp, tokenString)
 
 		feedback = append(feedback, Feedback{timestamp, tokenString})
-
 	}
-
-	return feedback, nil
 }
