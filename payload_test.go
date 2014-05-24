@@ -34,3 +34,16 @@ func TestCreatePayloadData(t *testing.T) {
 		t.Error(payload.data)
 	}
 }
+
+func BenchmarkCreatePayload(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		rawPayload := Payload{Aps: Aps{Alert: "Message"}}
+		payload, err := createPayload(rawPayload, "1234567812345678123456781234567812345678123456781234567812345678", 1, knownTime)
+		if err != nil {
+			b.Fatalf("Error should not be nil, got:", err)
+		}
+		if payload == nil {
+			b.Fatal("Payload is nil")
+		}
+	}
+}
