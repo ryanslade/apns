@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"time"
 )
 
@@ -31,18 +30,6 @@ type rawPayload struct {
 	data    []byte
 	id      uint32
 	created time.Time
-}
-
-type binaryWriter struct {
-	w   io.Writer
-	err error
-}
-
-func (bw *binaryWriter) write(v interface{}) {
-	if bw.err != nil {
-		return
-	}
-	bw.err = binary.Write(bw.w, binary.BigEndian, v)
 }
 
 func createPayload(payload Payload, token string, id uint32, now time.Time) (*rawPayload, error) {
